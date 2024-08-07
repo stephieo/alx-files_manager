@@ -1,11 +1,11 @@
 #!/usr/bin/node
-const redis = require('redis');
+import { redis } from 'redis';
 
 class RedisClient {
   constructor() {
-     this.client = redis.createClient();
+    this.client = redis.createClient();
     this.client.on('error', (err) => {
-      console.log("Error! :", err);
+      console.log('Error! :', err);
     });
   }
 
@@ -18,9 +18,9 @@ class RedisClient {
       this.client.get(key, (err, val) => {
         if (err) {
           reject(err);
-        } else { 
+        } else {
           resolve(val);
-       }
+        }
       });
     });
   }
@@ -30,9 +30,9 @@ class RedisClient {
       this.client.setex(key, duration, val, (err) => {
         if (err) {
           reject(err);
-        } else { 
+        } else {
           resolve(true);
-       }
+        }
       });
     });
   }
@@ -45,10 +45,9 @@ class RedisClient {
         } else {
           resolve(true);
         }
-      }
+      });
     });
   }
-
 }
 
 const redisClient = new RedisClient();
