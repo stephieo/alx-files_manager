@@ -1,5 +1,5 @@
 #!/usr/bin/node
-import MongoClient from 'mongodb';
+import { MongoClient } from 'mongodb';
 
 class DBClient {
   constructor() {
@@ -14,18 +14,19 @@ class DBClient {
         this.db = this.client.db(database);
       })
       .catch(() => {
+        this.db = null;
         console.log('Database Connection Failure');
       });
   }
 
   isAlive() {
-    return this.db;
+    return !!this.db;
   }
 
   async nbUsers() {
     this.users = this.db.collection('users');
-    const queryAllUsers = await this.users.find({}).toArray();
-    return queryAllUsers.length;
+    const countAllUsers = await this.users.countDocuments({});
+    return countAllUsers;
   }
 
   async nbFiles() {
