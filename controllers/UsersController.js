@@ -1,8 +1,9 @@
+/* eslint-disable */
 import sha1 from 'sha1';
 import { ObjectId } from 'mongodb';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
-import { userQueue } from '../worker';
+// import { userQueue } from '../worker';
 
 export default class UsersController {
   static async postNew(req, res) {

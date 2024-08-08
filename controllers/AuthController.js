@@ -5,24 +5,27 @@ import redisClient from '../utils/redis';
 
 export default class AuthController {
   static async getConnect(req, res) {
+    // check for authorized email and password in request
     const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
-
-    const [scheme, credentials] = authHeader.split(' ');
-    if (scheme !== 'Basic' || !credentials) return res.status(401).json({ error: 'Unauthorized' });
-
-    const [email, password] = Buffer.from(credentials, 'base64').toString().split(':');
-    if (!email || !password) return res.status(401).json({ error: 'Unauthorized' });
+    if (!authHeader) {
+      return res.status(401).send({ error: 'Unauthorized' });
+    }
+    // decode base64
+    const authCreds = authHeader.split(' ')[1];
+    const decodedCreds = Buffer.from(authCreds, 'base64').toString('utf-8');
+    const [authEmail, authPassword] = decodedCreds.split(':');
 
     try {
-      const hashedPassword = sha1(password);
-      const user = await dbClient.dbClient.collection('users').findOne({ email, password: hashedPassword });
-      if (!user) return res.status(401).json({ error: 'Unauthorized' });
+      const hashAuthPassword = sha1(authPassword);
+      // check if user exists
+      const authUserExists = await dbClient.db.collection('users').findOne({ email: authEmail, password: hashAuthPassword });
+      if (!authUserExists) return res.status(401).send({ error: 'Unauthorized' });
 
-      const token = uuidv4();
-      await redisClient.setex(`auth_${token}`, 86400, user._id.toString());
-
-      return res.status(200).json({ token });
+      // create session in Redis
+      const tokenString = uuidv4();
+      const sessionKey = `auth_${tokenString}`;
+      redisClient.set(sessionKey, authUserExists._id.toString(), 86400);
+      return res.status(200).send({token: tokenString});
     } catch (error) {
       console.error('Error during authentication:', error);
       return res.status(500).json({ error: 'Internal Server Error' });
