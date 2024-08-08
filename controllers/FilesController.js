@@ -89,7 +89,7 @@ class FilesController {
         .aggregate([
           { $match: { userId, parentId: parseInt(parentId, 10) } },
           { $skip: skip },
-          { $limit: pageSize }
+          { $limit: pageSize },
         ])
         .toArray();
 
@@ -100,6 +100,5 @@ class FilesController {
     }
   }
 }
-
 
 export default FilesController;
