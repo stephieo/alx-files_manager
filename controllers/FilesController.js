@@ -1,4 +1,4 @@
-#!/usr/bin/node
+/* eslint-disable */
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
@@ -132,6 +132,8 @@ class FilesController {
       .findOne({ _id: ObjectId(fileId) });
     return res.status(200).json(updatedFile);
   }
+
+
 }
 
 export default FilesController;

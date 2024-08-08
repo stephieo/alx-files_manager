@@ -19,7 +19,7 @@ export default class AuthController {
       const hashAuthPassword = sha1(authPassword);
       // check if user exists
       const authUserExists = await dbClient.db.collection('users').findOne({ email: authEmail, password: hashAuthPassword });
-      if (!authUserExists) return res.status(401).send({ error: 'Unauthorized' });
+      if (!authUserExists) return res.status(401).send('Unauthorized');
 
       // create session in Redis
       const tokenString = uuidv4();
@@ -43,7 +43,7 @@ export default class AuthController {
       await redisClient.del(`auth_${token}`);
       return res.status(204).end();
     } catch (error) {
-      console.error('Error during sign-out:', error);
+      console.error('Error signing out:', error);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
   }
