@@ -1,18 +1,27 @@
 /* eslint-disable */
 import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
+import { promises } from 'fs';
 import path from 'path';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
+import dbclient from '../utils/db';
 
 class FilesController {
   static async postUpload(req, res) {
-    const token = req.headers['x-token'];
+    // verify correct token
+    const token = req.headers['X-Token'];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
-    const userId = await redisClient.get(`auth_${token}`);
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    //  retrieve user from Redisdb based on token
+    try {
+      const userId = await redisClient.get(`auth_${token}`);
+      if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    } catch(error) {
+      console.error('Error retrieving user based on token:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
 
+    //  extract input fields for posting files from body
     const {
       name,
       type,
@@ -21,28 +30,26 @@ class FilesController {
       data,
     } = req.body;
 
+    // verifying important info: filename, type and data ( fo non-folders)
     if (!name) return res.status(400).json({ error: 'Missing name' });
     if (!type || !['folder', 'file', 'image'].includes(type)) return res.status(400).json({ error: 'Missing type' });
-    if (type !== 'folder' && !data) return res.status(400).json({ error: 'Missing data' });
-
-    let parentFile;
+    if (!data && type != 'folder') return res.status(400).json({ error: 'Missing data' });
+    
     if (parentId) {
-      parentFile = await dbClient.dbClient.collection('files').findOne({ _id: parentId });
-      if (!parentFile) return res.status(400).json({ error: 'Parent not found' });
-      if (parentFile.type !== 'folder') return res.status(400).json({ error: 'Parent is not a folder' });
+      // check if parent folder exists in mongodb 
+      try{
+        let parentFileExist = await dbclient.db.collection('files').findOne({_id: parentId});
+        if (!parentFileExist) return res.status(400).json({ error: 'Parent not found' });
+        if (parentFileExist.type !== 'folder') return res.status(400).json({ error: 'Parent is not a folder' });
+      } catch(error) {
+        console.error('Error checking for parent folder:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
     }
 
-    const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
-    if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
-
-    let filePath;
-    if (type !== 'folder') {
-      filePath = path.join(folderPath, `${uuidv4()}_${name}`);
-      fs.writeFileSync(filePath, Buffer.from(data, 'base64'));
-    }
-
+    // create the file to be added to database
     const newFile = {
-      userId,
+      userId: ObjectId(userId),
       name,
       type,
       isPublic,
@@ -50,6 +57,34 @@ class FilesController {
       localPath: filePath || null,
     };
 
+    //  for folders, just insert document and return response
+    if (type === 'folder') {
+      const result = await dbclient.db.collection('files').insertOne(newfile);
+      if (result) return res.status.send({result, ...newFile});
+    }
+
+    // for files
+
+    // get folder path
+    const folderPath = process.env.FOLDER_PATH || '/tmp/files_manager';
+
+    // construct full filepath
+    const filenameUnique = uuidv4();
+    filePath = path.join(folderPath, filenameUnique);
+
+    // check that folder path exists, if not create it
+    await promises.mkdir(folderPath, { recursive: true });
+
+    // convert data extracted from req.body and write to file on disk
+    try{
+      const fileData = Buffer.from(data, 'base64');
+      await promises.writeFile(filePath, fileData);
+    } catch(error) {
+      console.error('Error writing file to disk:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    //  insert document into mongo database
     try {
       const result = await dbClient.dbClient.collection('files').insertOne(newFile);
       return res.status(201).json({ ...newFile, id: result.insertedId });

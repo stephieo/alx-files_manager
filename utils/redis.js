@@ -1,6 +1,6 @@
 #!/usr/bin/node
 import redis from 'redis';
-
+// redis db will be holding session data
 class RedisClient {
   constructor() {
     this.client = redis.createClient();
