@@ -12,7 +12,7 @@ export default class AuthController {
     }
     // decode base64
     const authCreds = authHeader.split(' ')[1];
-    const decodedCreds = Buffer.from(authCreds, 'base64').toString('utf-8');
+    const decodedCreds = Buffer.from(authCreds, 'base64').toString('ascii');
     const [authEmail, authPassword] = decodedCreds.split(':');
 
     try {
@@ -24,7 +24,7 @@ export default class AuthController {
       // create session in Redis
       const tokenString = uuidv4();
       const sessionKey = `auth_${tokenString}`;
-      redisClient.set(sessionKey, authUserExists._id.toString(), 86400);
+      await redisClient.set(sessionKey, authUserExists._id.toString(), 86400);
       return res.status(200).send({token: tokenString});
     } catch (error) {
       console.error('Error during authentication:', error);
