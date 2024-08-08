@@ -12,13 +12,17 @@ export default class UsersController {
     if (!password) return res.status(400).json({ error: 'Missing password' });
 
     try {
-      const userExists = await dbClient.dbClient.collection('users').findOne({ email });
+      // check for existing user
+      const userExists = await dbClient.db.collection('users').findOne({ email });
       if (userExists) return res.status(400).json({ error: 'Already exist' });
 
+      // hash pasword
       const hashedPassword = sha1(password);
-      const result = await dbClient.dbClient.collection('users').insertOne({ email, password: hashedPassword });
-      userQueue.add({ userId: result.insertedId });
-      return res.status(201).json({ id: result.insertedId, email });
+
+      // add new user to database
+      const result = await dbClient.db.collection('users').insertOne({ email, password: hashedPassword });
+      // userQueue.add({ userId: result.insertedId });
+      if (result) return res.status(201).json({ id: result.insertedId, email });
     } catch (error) {
       console.error('Error creating user:', error);
       return res.status(500).json({ error: 'Internal Server Error' });
