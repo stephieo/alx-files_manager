@@ -1,6 +1,6 @@
 #!/usr/bin/node
 import express from 'express';
-import dbRoutes from './routes/index';
+import dbRoutes from './routes/index.js';
 
 const app = express();
 const port = process.env.PORT || '5000';

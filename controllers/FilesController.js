@@ -164,9 +164,103 @@ class FilesController {
 
     const updatedFile = await dbClient.db
       .collection('files')
-      .findOne({ _id: ObjectId(fileId) });
+      .findOne({ _id: ObjectId(fileId), userId: ObjectId(userId) });
     return res.status(200).json(updatedFile);
   }
+
+  static async putUnpublish(req, res) {
+    try {
+      // Extract the token from the 'x-token' header and check if it exists
+      const token = req.headers['x-token'];
+      if (!token) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+  
+      // Get the user ID linked with the token from Redis
+      const userId = await redisClient.get(`auth_${token}`);
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+  
+      // Extract the file ID from the request parameters
+      const fileId = req.params.id;
+      const idObject = new ObjectID(fileId);
+  
+      // Search for the file in the database using the file ID and user ID
+      const file = await dbClient.db
+        .collection('files')
+        .findOne({ _id: idObject, userId: ObjectId(userId) });
+  
+      if (!file) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+  
+      // Update the file's isPublic property to false
+      const newValue = { $set: { isPublic: false } };
+      const options = { returnOriginal: false };
+  
+      const result = await dbClient.db
+        .collection('files')
+        .findOneAndUpdate(
+          { _id: idObject, userId: ObjectId(userId) },
+          newValue,
+          options
+        );
+  
+      if (!result.lastErrorObject.updatedExisting) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+  
+      return res.status(200).json(result.value);
+    } catch (error) {
+      console.error('Error in putUnpublish:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  }
+  static async getFile(req, res) {
+    const token = req.headers['x-token'];
+    const fileId = req.params.id;
+    const size = req.query.size;
+
+    // Retrieve the file document from the database
+    const fileDoc = await dbClient.db.collection('files').findOne({ _id: ObjectId(fileId) });
+
+    if (!fileDoc) {
+        return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Check if the file is private and if the user has the correct access token
+    if (!fileDoc.isPublic) {
+        if (!token) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        const userId = await redisClient.get(`auth_${token}`);
+        if (!userId || fileDoc.userId.toString() !== userId.toString()) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+    }
+
+    // Return an error if the file is a folder
+    if (fileDoc.type === 'folder') {
+        return res.status(400).json({ error: "Folders don't contain files" });
+    }
+
+    // Determine the path to the file, accounting for size variations if specified
+    const filePath = size ? `${fileDoc.localPath}_${size}` : fileDoc.localPath;
+
+    // Check if the file exists on the local filesystem
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found on the server' });
+    }
+
+    // Set the correct MIME type for the response and stream the file content to the client
+    const mimeType = mime.lookup(fileDoc.name);
+    res.setHeader('Content-Type', mimeType);
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+}
+
 
 
 }
