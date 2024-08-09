@@ -5,6 +5,22 @@ import path from 'path';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 import dbclient from '../utils/db';
+import { ObjectId } from 'mongodb';
+import mime from 'mime-types';
+import Queue from 'bull';
+
+const fileQueue = new Queue('fileQueue', 
+  {
+    redis:{
+      host: process.env.REDIS_HOST || '127.0.0.1:6379',
+      port: process.env.REDIS_PORT || 6379,
+    }
+  
+  });
+
+  fileQueue.on('error', (error) => {
+    console.error('Error initializing file queue:', error);
+  });
 
 class FilesController {
   static async postUpload(req, res) {
@@ -56,13 +72,16 @@ class FilesController {
       parentId: parentId || 0,
       localPath: filePath || null,
     };
-
-    //  for folders, just insert document and return response
-    if (type === 'folder') {
-      const result = await dbclient.db.collection('files').insertOne(newfile);
-      if (result) return res.status.send({result, ...newFile});
+    try {
+      //  for folders, just insert document and return response
+      if (type === 'folder') {
+        const result = await dbclient.db.collection('files').insertOne(newfile);
+        if (result) return res.status.send({result, ...newFile});
+      }
+    } catch (error) {
+      console.error('Error inserting file:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
-
     // for files
 
     // get folder path
@@ -71,12 +90,11 @@ class FilesController {
     // construct full filepath
     const filenameUnique = uuidv4();
     filePath = path.join(folderPath, filenameUnique);
+    try {
+      // check that folder path exists, if not create it
+      await promises.mkdir(folderPath, { recursive: true });
 
-    // check that folder path exists, if not create it
-    await promises.mkdir(folderPath, { recursive: true });
-
-    // convert data extracted from req.body and write to file on disk
-    try{
+      // convert data extracted from req.body and write to file on disk
       const fileData = Buffer.from(data, 'base64');
       await promises.writeFile(filePath, fileData);
     } catch(error) {
@@ -222,12 +240,17 @@ class FilesController {
     const fileId = req.params.id;
     const size = req.query.size;
 
-    // Retrieve the file document from the database
-    const fileDoc = await dbClient.db.collection('files').findOne({ _id: ObjectId(fileId) });
+    try {
+      // Retrieve the file document from the database
+      const fileDoc = await dbClient.db.collection('files').findOne({ _id: ObjectId(fileId) });
 
-    if (!fileDoc) {
-        return res.status(404).json({ error: 'File not found' });
-    }
+      if (!fileDoc) {
+          return res.status(404).json({ error: 'File not found' });
+      }
+    } catch (error) {
+      console.error('Error retrieving user based on token:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }  
 
     // Check if the file is private and if the user has the correct access token
     if (!fileDoc.isPublic) {
